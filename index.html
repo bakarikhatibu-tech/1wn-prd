@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Advanced Prediction Model</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f172a">
+
+<style>
+body { font-family: Arial; text-align:center; background:#0f172a; color:white; }
+.grid { display:grid; grid-template-columns:repeat(5,70px); gap:10px; justify-content:center; margin-top:20px;}
+.box { width:70px; height:70px; display:flex; align-items:center; justify-content:center; border-radius:10px; font-size:18px; flex-direction:column;}
+.safe { background:#2563eb; }
+.bomb { background:#dc2626; }
+.predicted { outline:4px solid yellow; }
+button { margin:10px; padding:10px 20px; border:none; border-radius:6px; background:#22c55e; color:white; cursor:pointer;}
+#history { max-width:400px; margin:20px auto; text-align:left; }
+</style>
+</head>
+
+<body>
+
+<h2>🔥 Smart Prediction Model</h2>
+<p>Auto updates every 10 minutes</p>
+<div id="timer"></div>
+
+<div class="grid" id="grid"></div>
+
+<button onclick="generate()">Generate Now</button>
+
+<h3>📊 Prediction History</h3>
+<div id="history"></div>
+
+<script>
+let interval = 600000;
+let history = JSON.parse(localStorage.getItem("history") || "[]");
+
+// weight system (smarter logic)
+let weights = Array(25).fill(1);
+
+function generate(){
+    let grid = document.getElementById("grid");
+    grid.innerHTML = "";
+
+    let boxes = Array(25).fill("safe");
+
+    // bombs
+    let bombIndexes = [];
+    while(bombIndexes.length < 5){
+        let i = Math.floor(Math.random()*25);
+        if(!bombIndexes.includes(i)) bombIndexes.push(i);
+    }
+    bombIndexes.forEach(i => boxes[i] = "bomb");
+
+    // smarter prediction using weights
+    let candidates = [];
+    boxes.forEach((b,i)=>{
+        if(b === "safe"){
+            candidates.push({index:i, weight:weights[i]});
+        }
+    });
+
+    candidates.sort((a,b)=>b.weight - a.weight);
+
+    let predicted = candidates.slice(0,3);
+
+    // confidence score
+    predicted.forEach(p=>{
+        p.confidence = (p.weight / Math.max(...weights) * 100).toFixed(0);
+    });
+
+    // update weights (learning)
+    predicted.forEach(p=>{
+        if(boxes[p.index] === "safe"){
+            weights[p.index] += 1;
+        } else {
+            weights[p.index] = Math.max(1, weights[p.index]-1);
+        }
+    });
+
+    // save history
+    history.unshift({
+        time:new Date().toLocaleTimeString(),
+        picks: predicted.map(p=>p.index),
+    });
+    history = history.slice(0,10);
+    localStorage.setItem("history", JSON.stringify(history));
+
+    // render grid
+    boxes.forEach((type,i)=>{
+        let div = document.createElement("div");
+        div.classList.add("box");
+
+        if(type === "safe"){
+            div.classList.add("safe");
+            div.innerHTML = "⭐";
+        } else {
+            div.classList.add("bomb");
+            div.innerHTML = "💣";
+        }
+
+        let found = predicted.find(p=>p.index === i);
+        if(found){
+            div.classList.add("predicted");
+            div.innerHTML += "<small>"+found.confidence+"%</small>";
+        }
+
+        grid.appendChild(div);
+    });
+
+    renderHistory();
+}
+
+function renderHistory(){
+    let h = document.getElementById("history");
+    h.innerHTML = history.map(item => 
+        "<div>⏱ "+item.time+" → Picks: "+item.picks.join(", ")+"</div>"
+    ).join("");
+}
+
+// timer
+function startTimer(){
+    let time = interval/1000;
+    setInterval(()=>{
+        let m = Math.floor(time/60);
+        let s = time%60;
+        document.getElementById("timer").innerText = "Next update: "+m+"m "+s+"s";
+        time--;
+        if(time<0){
+            generate();
+            time = interval/1000;
+        }
+    },1000);
+}
+
+// PWA service worker
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js');
+}
+
+generate();
+startTimer();
+</script>
+
+</body>
+</html>
